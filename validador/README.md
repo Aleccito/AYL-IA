@@ -43,13 +43,13 @@ En la interfaz: **formato** (combo) y **cadena** (campo de texto). Botones: *Val
 
 | Formato | Regla | Válidos | Inválidos |
 |---|---|---|---|
-| Correo (base) | `usuario@dominio.ext`; usuario con letras, dígitos, `.`, `_`, `-`; dominio con letras, dígitos, `-` y al menos un `.` | `ana@correo.com`, `juan.perez@mail.example.pa` | `ana@`, `ana@correo`, `ana@@correo.com`, `ana@correo..com` |
+| Correo | Estándar RFC 5321/5322 sin límites de longitud: parte local con letras, dígitos y `` !#$%&'*+/=?^_`{|}~- `` separados por `.` (sin punto al inicio, final ni doble); dominio con etiquetas sin guion en los bordes, al menos un `.` y último nivel con alguna letra | `ana@correo.com`, `user+tag@example.com`, `name/surname@example.com`, `a@b-c.d1` | `ana@correo`, `a..b@x.com`, `.ana@x.com`, `ana@-x.com`, `ana@a.123`, `ana@[192.168.2.1]` |
 | Cédula | Prefijo: provincia `1`–`13`, o `PE`, `E`, `N`; luego `-` 1–4 dígitos `-` 1–6 dígitos | `8-123-456`, `10-23-4567`, `PE-1-234`, `E-8-12345`, `N-12-345` | `0-1-1`, `14-1-1`, `X-1-1`, `8-123`, `pe-1-234` |
 | IPv4 | 4 octetos 0–255 separados por `.`, sin ceros a la izquierda | `192.168.1.1`, `0.0.0.0`, `255.255.255.255` | `256.1.1.1`, `01.2.3.4`, `1.2.3`, `1.2.3.4.5` |
 | Placa | 2 letras, `-` opcional, 4 dígitos | `AB1234`, `AB-1234` | `A1234`, `ABC123`, `AB12345`, `1234AB` |
 | Teléfono | Panamá: `+507`, un espacio y `NNNN-NNNN` (8 dígitos) | `+507 6123-4567`, `+507 2631-2345` | `6123-4567`, `+507 61234567`, `+507 263-1234`, `+50 6123-4567` |
 
-> El formato de correo es una versión base; se ampliará más adelante.
+> Correo: no se soportan comillas, IP literal, Unicode ni los límites de 64/63 caracteres (el AFD tendría cientos de estados).
 > Supuesto propio: el formato de placa es una simplificación del real.
 
 ## Procesamiento
@@ -61,16 +61,25 @@ En la interfaz: **formato** (combo) y **cadena** (campo de texto). Botones: *Val
 Notación de las tablas: `→` estado inicial, `*` estado de aceptación, `–` sin transición (rechazo).
 
 ### Correo
-Regex: `[A-Za-z0-9._-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+`
+Regex: `[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+(?=[0-9-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?`
 
-| δ | - | . | @ | DIGITO | LETRA | _ |
+Clases: `LETRA`, `DIGITO`, `SIM` = `!#$%&'*+/=?^_`{|}~`, `-`, `.`, `@`, `OTRO`.
+
+Estados: `q0`/`u`/`v` leen la parte local (`v` = justo después de un punto); `a` = tras `@`; `d1`/`g1` = primera etiqueta del dominio (`g1` = terminó en guion); `p` = tras un punto del dominio; `L` = etiqueta con al menos una letra; `N` = etiqueta solo de dígitos; `gL`/`gN` = terminó en guion. Solo se acepta en `L`, o sea: dominio con punto y último nivel con al menos una letra.
+
+| δ | LETRA | DIGITO | SIM | - | . | @ |
 |---|---|---|---|---|---|---|
-| →q0 | u | u | – | u | u | u |
-| u | u | u | a | u | u | u |
-| a | d | – | – | d | d | – |
-| d | d | p | – | d | d | – |
-| p | e | – | – | e | e | – |
-| *e | e | p | – | e | e | – |
+| →q0 | u | u | u | u | – | – |
+| u | u | u | u | u | v | a |
+| v | u | u | u | u | – | – |
+| a | d1 | d1 | – | – | – | – |
+| d1 | d1 | d1 | – | g1 | p | – |
+| g1 | d1 | d1 | – | g1 | – | – |
+| p | L | N | – | – | – | – |
+| *L | L | L | – | gL | p | – |
+| N | L | N | – | gN | p | – |
+| gL | L | L | – | gL | – | – |
+| gN | L | N | – | gN | – | – |
 
 ### Cédula
 Regex: `(?:1[0-3]|[1-9]|PE|E|N)-[0-9]{1,4}-[0-9]{1,6}`

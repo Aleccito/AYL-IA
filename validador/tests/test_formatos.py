@@ -1,3 +1,4 @@
+import random
 import re
 import unittest
 
@@ -56,6 +57,15 @@ class TestFormatos(unittest.TestCase):
             for x in f.ejemplos_invalidos:
                 with self.subTest(formato=nombre, cadena=x):
                     self.assertFalse(re.fullmatch(f.regex, x))
+
+    def test_correo_aleatorio(self):
+        """AFD y regex coinciden en miles de cadenas al azar con un alfabeto reducido."""
+        f = FORMATOS["Correo"]
+        azar = random.Random(1)
+        alfabeto = "aZ5-._+@!\" "
+        for _ in range(20000):
+            x = "".join(azar.choice(alfabeto) for _ in range(azar.randint(0, 12)))
+            self.assertEqual(f.afd.acepta(x), bool(re.fullmatch(f.regex, x)), x)
 
     def test_ip_exhaustivo_octeto(self):
         f = FORMATOS["IPv4"]
