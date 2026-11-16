@@ -22,9 +22,18 @@ python -m unittest        # ejecuta las pruebas
 ```
 validador/
 ├── automata.py      # clase AFD genérica
-├── formatos.py      # regex + AFD + ejemplos de cada formato (FORMATOS)
+├── formatos/        # un módulo por formato; FORMATOS en __init__.py
+│   ├── base.py      #   Formato, construir() y alfabetos comunes
+│   ├── correo.py
+│   ├── cedula.py
+│   ├── ipv4.py
+│   ├── placa.py
+│   └── telefono.py  #   cada uno: clasificador + AFD + regex + ejemplos
 ├── simulador.py     # simular(afd, cadena) -> aceptada, traza, error
-├── gui.py           # interfaz Tkinter
+├── gui/             # interfaz Tkinter
+│   ├── tema.py      #   colores, estilos ttk e icono
+│   ├── diagrama.py  #   disposición y dibujo del AFD (flechas numeradas)
+│   └── app.py       #   ventana, tablas y botones
 ├── main.py          # punto de entrada
 └── tests/test_formatos.py
 ```
@@ -38,10 +47,10 @@ En la interfaz: **formato** (combo) y **cadena** (campo de texto). Botones: *Val
 | Cédula | Prefijo: provincia `1`–`13`, o `PE`, `E`, `N`; luego `-` 1–4 dígitos `-` 1–6 dígitos | `8-123-456`, `10-23-4567`, `PE-1-234`, `E-8-12345`, `N-12-345` | `0-1-1`, `14-1-1`, `X-1-1`, `8-123`, `pe-1-234` |
 | IPv4 | 4 octetos 0–255 separados por `.`, sin ceros a la izquierda | `192.168.1.1`, `0.0.0.0`, `255.255.255.255` | `256.1.1.1`, `01.2.3.4`, `1.2.3`, `1.2.3.4.5` |
 | Placa | 2 letras, `-` opcional, 4 dígitos | `AB1234`, `AB-1234` | `A1234`, `ABC123`, `AB12345`, `1234AB` |
-| Teléfono | Fijo `NNN-NNNN` (primer dígito 2-5, 7-9) o celular `6NNN-NNNN` | `263-1234`, `6123-4567` | `163-1234`, `2631234`, `6123-456` |
+| Teléfono | Panamá: `+507`, un espacio y `NNNN-NNNN` (8 dígitos) | `+507 6123-4567`, `+507 2631-2345` | `6123-4567`, `+507 61234567`, `+507 263-1234`, `+50 6123-4567` |
 
 > El formato de correo es una versión base; se ampliará más adelante.
-> Supuestos propios: los formatos de placa y teléfono son simplificaciones de los reales.
+> Supuesto propio: el formato de placa es una simplificación del real.
 
 ## Procesamiento
 1. Se parte del estado inicial.
@@ -116,25 +125,23 @@ Regex: `[A-Za-z]{2}-?[0-9]{4}`
 | *d4 | – | – | – |
 
 ### Teléfono
-Regex: `(?:[2-57-9][0-9]{2}|6[0-9]{3})-[0-9]{4}`
+Regex: `\+507 [0-9]{4}-[0-9]{4}`
 
-Clases: `SEIS`='6', `FIJO`='2'…'5','7'…'9', `D01`='0','1', `-`, `OTRO`.
+Clases: `MAS`='+', `C5`='5', `C0`='0', `C7`='7', `OTRO_DIG`=resto de dígitos, `ESP`=' ', `-`, `OTRO`.
 
-| δ | - | D01 | FIJO | SEIS |
-|---|---|---|---|---|
-| →t0 | – | – | f1 | m1 |
-| f1 | – | f2 | f2 | f2 |
-| f2 | – | f3 | f3 | f3 |
-| f3 | g | – | – | – |
-| m1 | – | m2 | m2 | m2 |
-| m2 | – | m3 | m3 | m3 |
-| m3 | – | m4 | m4 | m4 |
-| m4 | g | – | – | – |
-| g | – | h1 | h1 | h1 |
-| h1 | – | h2 | h2 | h2 |
-| h2 | – | h3 | h3 | h3 |
-| h3 | – | h4 | h4 | h4 |
-| *h4 | – | – | – | – |
+| δ | - | C0 | C5 | C7 | ESP | MAS | OTRO_DIG |
+|---|---|---|---|---|---|---|---|
+| →t0 | – | – | – | – | – | t1 | – |
+| t1 | – | – | t2 | – | – | – | – |
+| t2 | – | t3 | – | – | – | – | – |
+| t3 | – | – | – | t4 | – | – | – |
+| t4 | – | – | – | – | t5 | – | – |
+| t5 | – | a1 | a1 | a1 | – | – | a1 |
+| a1, a2, a3 | – | a(k+1) | a(k+1) | a(k+1) | – | – | a(k+1) |
+| a4 | g | – | – | – | – | – | – |
+| g | – | b1 | b1 | b1 | – | – | b1 |
+| b1, b2, b3 | – | b(k+1) | b(k+1) | b(k+1) | – | – | b(k+1) |
+| *b4 | – | – | – | – | – | – | – |
 
 ## Resultados
 La salida es: **aceptada / rechazada**, la **traza** `(posición, símbolo, estado origen, estado destino)` y, si se rechaza, el **error** con posición y motivo.
