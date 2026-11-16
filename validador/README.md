@@ -165,6 +165,8 @@ Ejemplo rechazado, cédula `14-1-1`: tras `1` (q0 → p1), el símbolo `4` no ti
 
 Ejemplo rechazado por fin de cadena, `8-123-`: termina en `g2` → `Fin de cadena: terminó en g2, que no es de aceptación`.
 
+En la tabla de traza, al rechazar una cadena se agrega una última fila en rojo con el motivo (sin transición o fin de cadena sin aceptación). **Al hacer clic en cualquier fila** (también la del fallo) el diagrama y la línea "Lectura" muestran ese paso: estado alcanzado, flecha tomada y símbolo en curso.
+
 En la interfaz, el diagrama dibuja los estados (doble círculo = aceptación) y resalta el **estado actual** (amarillo mientras avanza, verde si acepta, rojo si rechaza).
 
 ### Capturas de pantalla

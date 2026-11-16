@@ -37,7 +37,8 @@ class App:
         aplicar_estilos(raiz)
 
         self.resultado = None
-        self.paso = 0
+        self.paso = 0   # filas de la tabla ya reveladas (avance de la simulación)
+        self.vista = 0  # fila que se está mostrando en diagrama y lectura (clic en la tabla)
         self.cadena_sim = None
         self.idx_ejemplo = {"v": 0, "i": 0}
 
@@ -95,8 +96,10 @@ class App:
     def _crear_tabla_traza(self, padre):
         self.tabla = crear_tabla(padre, ("pos", "simbolo", "desde", "hacia"),
                                  ("Posición", "Símbolo", "Desde", "Hacia"),
-                                 (75, 70, 75, 75), height=16)
+                                 (75, 70, 75, 140), height=16)
         self.tabla.tag_configure("ultimo", background=AMBAR_SUAVE, font=(FUENTE, 10, "bold"))
+        self.tabla.tag_configure("fallo", foreground=ROJO, font=(FUENTE, 10, "bold"))
+        self.tabla.bind("<ButtonRelease-1>", self._clic_traza)
         self.tabla.pack(side="left", fill="y")
 
     def _crear_paneles_diagrama(self, padre):
@@ -159,13 +162,29 @@ class App:
     def formato(self):
         return FORMATOS[self.combo.get()]
 
-    def _estado_actual(self):
-        if self.resultado is None or self.paso == 0:
+    def _estado_en(self, k):
+        """Estado del autómata tras k pasos reales de la traza."""
+        if self.resultado is None or k == 0:
             return self.formato.afd.inicial
-        return self.resultado.traza[self.paso - 1][3]
+        return self.resultado.traza[k - 1][3]
 
     def _terminado(self):
         return self.resultado is not None and self.paso == len(self.resultado.traza)
+
+    def _filas(self):
+        """Filas de la tabla: pasos revelados y, al terminar rechazada, la fila del fallo."""
+        r = self.resultado
+        if r is None:
+            return []
+        filas = list(r.traza[:self.paso])
+        if self._terminado() and r.error:
+            pos, _ = r.error
+            estado = self._estado_en(len(r.traza))
+            if len(r.traza) < len(self.cadena_sim):
+                filas.append((pos, self.cadena_sim[pos - 1], estado, "sin transición"))
+            else:
+                filas.append((pos, "(fin)", estado, "no es de aceptación"))
+        return filas
 
     def _simular(self):
         self.cadena_sim = self.entrada.get()
@@ -183,6 +202,7 @@ class App:
     def validar(self):
         self._simular()
         self.paso = len(self.resultado.traza)
+        self.vista = len(self._filas())
         self._refrescar()
 
     def siguiente(self):
@@ -191,12 +211,21 @@ class App:
             self.paso = 0
         elif self.paso < len(self.resultado.traza):
             self.paso += 1
+        self.vista = len(self._filas())
         self._refrescar()
 
     def reiniciar(self):
         self.resultado = None
         self.paso = 0
+        self.vista = 0
         self._refrescar()
+
+    def _clic_traza(self, evento):
+        """Clic en una fila: muestra ese paso en el diagrama y en la lectura (aunque falle)."""
+        iid = self.tabla.identify_row(evento.y)
+        if iid:
+            self.vista = int(iid)
+            self._refrescar()
 
     def ejemplo(self, tipo):
         lista = self.formato.ejemplos_validos if tipo == "v" else self.formato.ejemplos_invalidos
@@ -227,32 +256,35 @@ class App:
     def _refrescar(self):
         r = self.resultado
         terminado = self._terminado()
-        self._mostrar_traza()
+        filas = self._filas()
+        self.vista = min(self.vista, len(filas))
+        en_final = terminado and self.vista == len(filas)
+        pasos = min(self.vista, len(r.traza)) if r is not None else 0  # pasos reales leídos
+        self._mostrar_traza(filas)
         self._mostrar_veredicto(terminado)
-        self._mostrar_cadena(terminado)
-        color = AMBAR
-        if terminado:
-            color = VERDE if r.aceptada else ROJO
-        tomada = tuple(r.traza[self.paso - 1][2:4]) if r is not None and self.paso else None
-        self.diagrama.dibujar(self._estado_actual(), color, tomada)
+        self._mostrar_cadena(terminado, en_final, pasos)
+        color = (VERDE if r.aceptada else ROJO) if en_final else AMBAR
+        tomada = tuple(r.traza[self.vista - 1][2:4]) if 0 < self.vista <= len(r.traza) else None
+        self.diagrama.dibujar(self._estado_en(pasos), color, tomada)
         self._marcar_flecha(tomada)
 
-    def _mostrar_traza(self):
+    def _mostrar_traza(self, filas):
         self.tabla.delete(*self.tabla.get_children())
-        if self.resultado is None:
-            return
-        for i, fila in enumerate(self.resultado.traza[:self.paso]):
-            tag = "ultimo" if i == self.paso - 1 else ("par" if i % 2 == 0 else "impar")
-            item = self.tabla.insert("", "end", values=fila, tags=(tag,))
-        if self.paso:
-            self.tabla.see(item)
+        for i, fila in enumerate(filas, start=1):
+            if i == self.vista:
+                tag = "fallo" if i > len(self.resultado.traza) else "ultimo"
+            else:
+                tag = "par" if i % 2 else "impar"
+            self.tabla.insert("", "end", iid=str(i), values=fila, tags=(tag,))
+        if self.vista:
+            self.tabla.see(str(self.vista))
 
     def _mostrar_veredicto(self, terminado):
         r = self.resultado
         if terminado and r.aceptada:
-            self.veredicto.config(text="✔  CADENA ACEPTADA", fg=SOBRE_ACENTO, bg=VERDE)
+            self.veredicto.config(text="CADENA ACEPTADA", fg=SOBRE_ACENTO, bg=VERDE)
         elif terminado:
-            self.veredicto.config(text="✘  CADENA RECHAZADA", fg="white", bg=ROJO)
+            self.veredicto.config(text="CADENA RECHAZADA", fg="white", bg=ROJO)
         elif r is not None:
             self.veredicto.config(text=f"Simulando… paso {self.paso} de {len(r.traza)}",
                                   fg=AMBAR, bg=AMBAR_SUAVE)
@@ -260,8 +292,8 @@ class App:
             self.veredicto.config(text=TEXTO_INICIAL, fg=TENUE, bg=PANEL)
         self.detalle.config(text=("Motivo: " + r.error[1]) if terminado and r.error else "")
 
-    def _mostrar_cadena(self, terminado):
-        """Leídos en verde, actual resaltado en ámbar (o rojo si falla), resto en gris."""
+    def _mostrar_cadena(self, terminado, en_final, pasos):
+        """Leídos en verde, siguiente en ámbar (rojo si es el que falla), resto en gris."""
         t = self.cadena_txt
         t.config(state="normal")
         t.delete("1.0", "end")
@@ -271,11 +303,11 @@ class App:
         for i, s in enumerate(cadena):
             if r is None:
                 tag = "resto"
-            elif i < self.paso:
+            elif i < pasos:
                 tag = "leido"
-            elif i == fallo:
+            elif i == fallo and en_final:
                 tag = "error"
-            elif i == self.paso and not terminado:
+            elif i == pasos and not en_final:
                 tag = "actual"
             else:
                 tag = "resto"
